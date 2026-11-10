@@ -10,3 +10,4 @@ def normalizar_registro(registro):
     # TODO A-S10-03: estandarizar tipo a minúsculas.
     # TODO A-S10-04: devolver una copia; no convertir aún el valor a float aquí.
     raise NotImplementedError("Pendiente: implementación del rol A, semana 10")
+
