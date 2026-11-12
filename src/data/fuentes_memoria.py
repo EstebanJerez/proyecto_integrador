@@ -16,13 +16,6 @@ def cargar_desde_memoria():
     # raise NotImplementedError("Pendiente: implementación del rol C, semana 10")"""
 
 
-import os
-os.chdir(r"C:\repositorio_esteban\proyecto_integrador")   # cambia por tu ruta real
-
-import sys
-sys.path.append(os.getcwd())
-# Este codigo se añade ya que con el codigo original no encuentra la carpeta src
-
 from src.data.sensores import obtener_registros
  
  
