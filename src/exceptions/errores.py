@@ -1,4 +1,4 @@
-"""Rol B: excepciones y registro de incidencias."""
+"""Rol B: excepciones y registro de incidencias (Versión simplificada)."""
 from datetime import datetime
 
 
@@ -23,11 +23,11 @@ class ErrorLecturaFuente(DataLabError):
 
 
 def crear_reporte_error(origen, identificador, mensaje, categoria="PROCESAMIENTO"):
-    """Construye un diccionario de error normalizado."""
+    """Crea un diccionario normalizado con los datos del error."""
     return {
         "timestamp": datetime.now().isoformat(),
         "origen": origen,
         "identificador": identificador,
         "categoria": categoria,
-        "mensaje": str(mensaje)
+        "mensaje": str(mensaje),
     }

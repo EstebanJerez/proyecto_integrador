@@ -1,76 +1,118 @@
-"""Orquestación del procesamiento.
-
-La clasificación permanece centralizada en clasificacion.py.
-"""
+from src.data.lectores import leer_csv, leer_excel, leer_json
 from src.exceptions.errores import (
     DataLabError,
+    ErrorFormatoFuente,
+    ErrorLecturaFuente,
     ErrorValidacion,
     crear_reporte_error,
 )
 from src.processing.clasificacion import clasificar_valor
 from src.processing.resumen import generar_resumen
-
-
-def _obtener_id(reg):
-    """Devuelve el id del registro, o "N/A" si no se puede obtener."""
-    if isinstance(reg, dict):
-        return reg.get("id", "N/A")
-    return "N/A"
+from src.validation.normalizacion import normalizar_registro
+from src.validation.validaciones import validar_registro
 
 
 def procesar_registros(registros):
-    resultados_validos = []
-    errores_detectados = []
+    """Procesa una lista de registros asegurando que un error individual no detenga el lote."""
+    # Validar que la entrada sea una lista o tupla
+    if not isinstance(registros, (list, tuple)):
+        error = ErrorFormatoFuente("La entrada debe ser una lista de registros")
+        reporte = crear_reporte_error("procesamiento_lote", "N/A", str(error), "FORMATO")
+        return {
+            "registros_validos": [],
+            "registros_invalidos": [],
+            "errores": [reporte],
+            "resumen": {}
+        }
 
-    for reg in registros:
+    validos = []
+    invalidos = []
+    errores = []
+
+    for registro in registros:
+        # Obtener el ID de forma segura con un diccionario
+        id_reg = registro.get("id", "N/A") if isinstance(registro, dict) else "N/A"
+        
         try:
-            identificador = str(reg.get("id", "DESCONOCIDO"))
-            tipo_dato = str(reg.get("tipo", "general"))
-            valor_bruto = reg.get("valor")
+            # 1. Normalizar el registro
+            registro_norm = normalizar_registro(registro)
+            
+            # 2. Validar el registro
+            es_valido, motivos = validar_registro(registro_norm)
+            
+            if not es_valido:
+                # Si falla la validación, se guardan los motivos
+                registro_norm["motivos"] = motivos
+                invalidos.append(registro_norm)
+            else:
+                # 3. Convertir el valor a float y clasificar
+                try:
+                    valor_num = float(registro_norm["valor"])
+                except (ValueError, TypeError):
+                    raise ErrorValidacion(f"No se pudo convertir el valor a numérico: {registro_norm.get('valor')}")
+                
+                registro_norm["valor"] = valor_num
+                registro_norm["clasificacion"] = clasificar_valor(valor_num, registro_norm["tipo"])
+                validos.append(registro_norm)
 
-            # Validar valores vacíos, nulos o cadenas de error comunes
-            if valor_bruto is None or str(valor_bruto).strip() == "" or str(valor_bruto).upper() in ["N/D", "ERROR", "SIN_DATO", "DESCONOCIDO", "NA", "?", "PENDIENTE", "SIN LECTURA"]:
-                raise ErrorValidacion(f"Valor no válido o ausente: {valor_bruto}")
+        except Exception as error:
+            # Capturar el error y asignarle su categoría de forma clara
+            if isinstance(error, ErrorValidacion):
+                categoria = "VALIDACION"
+            elif isinstance(error, ErrorFormatoFuente):
+                categoria = "FORMATO"
+            elif isinstance(error, ErrorLecturaFuente):
+                categoria = "LECTURA"
+            else:
+                categoria = "DATALAB" if isinstance(error, DataLabError) else "SISTEMA"
 
-            # Intentar conversión a float
-            try:
-                valor_numerico = float(valor_bruto)
-            except (ValueError, TypeError):
-                raise ErrorValidacion(f"No se pudo convertir el valor a numérico: {valor_bruto}")
+            mensaje = str(error) if isinstance(error, DataLabError) else f"Error inesperado: {error}"
+            errores.append(crear_reporte_error("procesamiento_lote", id_reg, mensaje, categoria))
 
-            # Clasificar el valor
-            clasificacion = clasificar_valor(valor_numerico, tipo_dato)
-
-            registro_procesado = {
-                "id": identificador,
-                "tipo": tipo_dato,
-                "valor": valor_numerico,
-                "unidad": str(reg.get("unidad", "")),
-                "clasificacion": clasificacion
-            }
-            resultados_validos.append(registro_procesado)
-
-        except DataLabError as e:
-            reporte = crear_reporte_error(
-                origen="procesamiento_lote",
-                identificador=_obtener_id(reg),
-                mensaje=str(e),
-                categoria="VALIDACION"
-            )
-            errores_detectados.append(reporte)
-        except Exception as e:
-            reporte = crear_reporte_error(
-                origen="procesamiento_lote",
-                identificador=_obtener_id(reg),
-                mensaje=f"Error inesperado: {str(e)}",
-                categoria="SISTEMA"
-            )
-            errores_detectados.append(reporte)
-
-    # Claves del contrato común (docs/contratos_modulos.md).
+    # Retornar el contrato común exigido por el proyecto
     return {
-        "registros_validos": resultados_validos,
-        "registros_invalidos": [],
-        "errores": errores_detectados,
-        "resumen": generar_resumen(resultados_validos),
+        "registros_validos": validos,
+        "registros_invalidos": invalidos,
+        "errores": errores,
+        "resumen": generar_resumen(validos),
     }
+
+
+def procesar_archivo(ruta):
+    """Lee un archivo externo (CSV, JSON o Excel) y procesa sus registros."""
+    ruta_texto = str(ruta)
+    
+    # Obtener la extensión del archivo de forma sencilla
+    extension = ""
+    if "." in ruta_texto:
+        extension = "." + ruta_texto.rsplit(".", 1)[1].lower()
+
+    # Diccionario para seleccionar el lector adecuado
+    lectores = {
+        ".csv": leer_csv,
+        ".json": leer_json,
+        ".xlsx": leer_excel,
+    }
+
+    lector = lectores.get(extension)
+    if lector is None:
+        error = ErrorFormatoFuente(f"Formato no soportado: {extension or 'sin extensión'}")
+        reporte = crear_reporte_error(ruta_texto, "N/A", str(error), "FORMATO")
+        return {
+            "registros_validos": [],
+            "registros_invalidos": [],
+            "errores": [reporte],
+            "resumen": {}
+        }
+
+    try:
+        registros = lector(ruta)
+        return procesar_registros(registros)
+    except Exception as error:
+        reporte = crear_reporte_error(ruta_texto, "N/A", str(error), "LECTURA")
+        return {
+            "registros_validos": [],
+            "registros_invalidos": [],
+            "errores": [reporte],
+            "resumen": {}
+        }
