@@ -1,45 +1,39 @@
-"""Rol C: adaptador de fuentes en memoria."""
-"""from src.data.sensores import obtener_registros
+"""Rol C: adaptador de fuentes en memoria.
 
-def cargar_desde_memoria():
-    # Fuente de datos funcional desde la primera entrega.
-    
-    
-    
-    return obtener_registros()"""
-
-"""def preparar_registros_prueba():
-    Rol C: escenarios adicionales de entrada para pruebas de semana 10.
-    # TODO C-S10-01: construir registros con espacios, mayúsculas y formatos diversos.
-    # TODO C-S10-02: construir casos incompletos y tipos no reconocidos.
-    # TODO C-S10-03: no alterar los 12 registros base.
-    # raise NotImplementedError("Pendiente: implementación del rol C, semana 10")"""
-
-
+REVISIÓN:
+  - Se eliminaron los print() al final del archivo. Se ejecutaban cada vez
+    que otro módulo hacía "import", ensuciando la consola y Streamlit.
+    Para probar a mano use:  python -c "from src.data.fuentes_memoria import *; print(len(cargar_desde_memoria()))"
+  - Se eliminó el código viejo "comentado" con comillas triples. Un texto
+    entre comillas no es un comentario: Python lo evalúa como una cadena.
+    El historial de Git ya guarda las versiones anteriores.
+  - Se agregó preparar_escenarios_defectuosos() (semana 11, escenarios de
+    fuentes defectuosas), que faltaba.
+"""
 from src.data.sensores import obtener_registros
- 
- 
+
+
 def cargar_desde_memoria():
     """Devuelve los 12 registros base de sensores (fuente funcional desde la semana 10).
- 
+
     Returns:
         list[dict]: lista de registros con claves id, tipo, valor y unidad.
     """
     # obtener_registros() construye una lista NUEVA en cada llamada,
     # por lo que quien reciba el resultado puede modificarlo sin dañar la fuente.
     return obtener_registros()
- 
- 
+
+
 def preparar_registros_prueba():
     """Construye escenarios adicionales de entrada para las pruebas de la semana 10.
- 
+
     Cubre tres grupos (un TODO por grupo):
       - C-S10-01: formatos diversos (espacios, mayúsculas, números como texto).
       - C-S10-02: registros incompletos.
       - C-S10-02: tipos de sensor no reconocidos.
     Además (C-S10-03) NO toca los 12 registros base: solo devuelve registros nuevos
     con ids propios (serie 1xx), así que no hay riesgo de alterar los originales.
- 
+
     Returns:
         list[dict]: solo los registros de prueba adicionales (sin los 12 base).
         Para usar base + pruebas:  cargar_desde_memoria() + preparar_registros_prueba()
@@ -54,7 +48,7 @@ def preparar_registros_prueba():
         {"id": "T102", "tipo": "TEMPERATURA", "valor": "  19  ", "unidad": "°c"},
         {"id": "P102", "tipo": " presion", "valor": "1008", "unidad": "hPa "},
     ]
- 
+
     # --- C-S10-02 (parte 1): registros incompletos -----------------------
     # Les falta una clave, o el dato viene vacío / None.
     incompletos = [
@@ -65,7 +59,7 @@ def preparar_registros_prueba():
         {"id": "H103", "tipo": "humedad", "valor": 45.0},                   # falta "unidad"
         {"id": "T104", "valor": 23.0, "unidad": "°C"},                      # falta "tipo"
     ]
- 
+
     # --- C-S10-02 (parte 2): tipos no reconocidos ------------------------
     # El sistema solo conoce temperatura, presion y humedad.
     # También se incluye un valor no numérico, que aparece en los datasets reales.
@@ -75,13 +69,31 @@ def preparar_registros_prueba():
         {"id": "X102", "tipo": 123, "valor": 5.0, "unidad": "u"},           # tipo que no es texto
         {"id": "T105", "tipo": "temperatura", "valor": "abc", "unidad": "°C"},  # valor no numérico
     ]
- 
+
     # Se crea una lista nueva uniendo los tres grupos. No se usa ningún
     # registro de sensores.py, así que los 12 base quedan intactos (C-S10-03).
     return formatos_diversos + incompletos + tipos_no_reconocidos
 
 
-print(cargar_desde_memoria())
-print(len(cargar_desde_memoria()))
-print(preparar_registros_prueba())
-print(len(preparar_registros_prueba()))
+def preparar_escenarios_defectuosos():
+    """REVISIÓN (semana 11): escenarios de fuentes DEFECTUOSAS.
+
+    A diferencia de preparar_registros_prueba() (datos de mala CALIDAD que
+    el Rol A rechaza con motivos), aquí la falla es TÉCNICA: el origen
+    entregó algo roto. El Rol B debe registrarlo en "errores" y seguir.
+
+    Returns:
+        list: 2 registros correctos + 4 defectuosos (6 elementos).
+    """
+    return [
+        {"id": "T201", "tipo": "temperatura", "valor": 22.0, "unidad": "°C"},
+        # Sensor que no respondió a tiempo (evento simulado).
+        {"id": "T202", "tipo": "temperatura", "valor": 23.0, "unidad": "°C",
+         "observacion_tecnica": "SIMULACION_TIMEOUT_SENSOR"},
+        # Fila que un lector marcó como irregular.
+        {"id": "P201", "_error_tecnico": "Fila irregular", "_origen": "CSV", "_fila": 7},
+        # Elementos que ni siquiera son diccionarios.
+        "T203;temperatura;21;°C",
+        None,
+        {"id": "H201", "tipo": "humedad", "valor": 50.0, "unidad": "%"},
+    ]
