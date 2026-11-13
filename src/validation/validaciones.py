@@ -23,6 +23,19 @@ UNIDADES_POR_TIPO = {
  
 # Campos que todo registro debe tener.
 CAMPOS_OBLIGATORIOS = ["id", "tipo", "valor", "unidad"]
+
+# REVISIÓN (semana 12): rango físicamente plausible por tipo de sensor.
+# Los datasets traen 8 valores "extremos respecto del rango de generación"
+# (96 °C, 295.5 hPa y 225 %). Son números bien escritos, pero no son
+# mediciones creíbles (una humedad de 225 % es imposible). Por eso se
+# rechazan aquí, como regla de CALIDAD.
+# OJO: esto NO es clasificar. BAJO/NORMAL/ALTO sigue estando solo en
+# clasificacion.py. Este rango solo responde "¿el dato es creíble?".
+RANGOS_PLAUSIBLES = {
+    "temperatura": (-50.0, 60.0),
+    "presion": (800.0, 1100.0),
+    "humedad": (0.0, 100.0),
+}
  
  
 def campo_esta_vacio(registro, campo):
@@ -42,6 +55,12 @@ def campo_esta_vacio(registro, campo):
  
     # None significa "no hay dato".
     if contenido is None:
+        return True
+
+    # REVISIÓN: NaN (celda vacía de Excel leída con pandas) también es
+    # "no hay dato". Antes se reportaba como "el valor no es numérico: nan",
+    # un motivo distinto al de una celda vacía de CSV para el mismo problema.
+    if isinstance(contenido, float) and contenido != contenido:
         return True
  
     # Si es texto, quitamos espacios (strip) y vemos si quedó vacío.
@@ -112,7 +131,10 @@ def validar_registro(registro):
     tipo = registro.get("tipo")
     tipo_es_conocido = False
     if not campo_esta_vacio(registro, "tipo"):
-        if tipo in TIPOS_PERMITIDOS:
+        # REVISIÓN: se pregunta primero si es texto. Si el tipo llegara como
+        # lista (["temperatura"]), "tipo in TIPOS_PERMITIDOS" lanzaría
+        # TypeError (una lista no se puede buscar en un set).
+        if isinstance(tipo, str) and tipo in TIPOS_PERMITIDOS:
             tipo_es_conocido = True
         else:
             motivos.append("tipo no permitido: " + str(tipo))
@@ -123,6 +145,17 @@ def validar_registro(registro):
     if not campo_esta_vacio(registro, "valor"):
         if not es_numero_valido(registro["valor"]):
             motivos.append("el valor no es numérico: " + str(registro["valor"]))
+        # REVISIÓN (semana 12): si es número y el tipo es conocido, se revisa
+        # que esté dentro del rango plausible del sensor.
+        elif tipo_es_conocido:
+            numero = float(registro["valor"])
+            minimo, maximo = RANGOS_PLAUSIBLES[tipo]
+            if numero < minimo or numero > maximo:
+                motivos.append(
+                    "valor fuera del rango plausible para " + tipo + ": "
+                    + str(numero) + " (se esperaba entre " + str(minimo)
+                    + " y " + str(maximo) + ")"
+                )
  
     # --- A-S10-08: la unidad debe corresponder al tipo de sensor ---
     # Solo tiene sentido si conocemos el tipo y la unidad existe.
