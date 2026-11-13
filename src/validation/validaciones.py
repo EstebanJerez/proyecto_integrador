@@ -24,15 +24,18 @@ UNIDADES_POR_TIPO = {
 # Campos que todo registro debe tener.
 CAMPOS_OBLIGATORIOS = ["id", "tipo", "valor", "unidad"]
 
-# REVISIÓN (semana 12): rango físicamente plausible por tipo de sensor.
-# Los datasets traen 8 valores "extremos respecto del rango de generación"
-# (96 °C, 295.5 hPa y 225 %). Son números bien escritos, pero no son
-# mediciones creíbles (una humedad de 225 % es imposible). Por eso se
-# rechazan aquí, como regla de CALIDAD.
+# REVISIÓN (semana 12): rango plausible (operativo) por tipo de sensor.
+# Los datasets traen valores "extremos respecto del rango de generación"
+# repetidos muchas veces: 999, -25, -18, 68 y 75 °C; 650, 700, 1200, 1250 y
+# 1500 hPa; -15, -5, 125, 150 y 999 %. Son números bien escritos, pero no
+# son mediciones creíbles (una humedad de 150 % es imposible; 999 es un
+# típico "código de error" del sensor). Por eso se rechazan aquí, como regla
+# de CALIDAD. Las lecturas reales de los datasets están entre 2 y 42 °C,
+# 851 y 1080 hPa y 5 y 95 %, todas dentro de estos rangos.
 # OJO: esto NO es clasificar. BAJO/NORMAL/ALTO sigue estando solo en
 # clasificacion.py. Este rango solo responde "¿el dato es creíble?".
 RANGOS_PLAUSIBLES = {
-    "temperatura": (-50.0, 60.0),
+    "temperatura": (-10.0, 50.0),
     "presion": (800.0, 1100.0),
     "humedad": (0.0, 100.0),
 }
