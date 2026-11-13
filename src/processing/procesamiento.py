@@ -19,8 +19,9 @@ from src.exceptions.errores import (
     DataLabError,
     ErrorConversion,
     ErrorEstructuraRegistro,
+    ErrorEventoSensor,
     ErrorFormatoFuente,
-    ErrorTimeoutSensor,
+    EVENTOS_TECNICOS,
     crear_reporte_error,
 )
 from src.processing.clasificacion import clasificar_valor
@@ -60,9 +61,13 @@ def _revisar_eventos_tecnicos(registro):
             f"{registro['_error_tecnico']} (origen {origen}, fila {fila})"
         )
 
-    # Evento simulado de un sensor que no respondió.
-    if registro.get("observacion_tecnica") == "SIMULACION_TIMEOUT_SENSOR":
-        raise ErrorTimeoutSensor("El sensor no respondió dentro del tiempo esperado")
+    # Eventos simulados que reporta el sensor (columna observacion_tecnica):
+    # SIMULACION_TIMEOUT_SENSOR, SIMULACION_PAQUETE_INCOMPLETO, ...
+    evento = registro.get("observacion_tecnica")
+    if isinstance(evento, str) and evento.strip().upper().startswith("SIMULACION_"):
+        evento = evento.strip().upper()
+        clase_error = EVENTOS_TECNICOS.get(evento, ErrorEventoSensor)
+        raise clase_error(f"Evento técnico del sensor: {evento}")
 
 
 def procesar_registros(registros):

@@ -4,8 +4,9 @@ REVISIÓN (semanas 11-12):
   - Cada excepción tiene ahora un atributo de clase CATEGORIA. Así el
     procesamiento no necesita una cadena de if/elif para saber la categoría:
     basta con leer error.CATEGORIA (las subclases la heredan o la cambian).
-  - Se agregan ErrorConversion, ErrorEstructuraRegistro y ErrorTimeoutSensor,
-    que la interfaz y las pruebas del docente esperan.
+  - Se agregan ErrorConversion, ErrorEstructuraRegistro y la familia
+    ErrorEventoSensor (timeout, paquete incompleto, lectura intermitente),
+    que los datasets, la interfaz y las pruebas del docente esperan.
   - El reporte usa la clave "fecha_hora" (contrato de la interfaz docente),
     no "timestamp".
 """
@@ -47,10 +48,35 @@ class ErrorEstructuraRegistro(ErrorFormatoFuente):
     CATEGORIA = "ESTRUCTURA_REGISTRO"
 
 
-class ErrorTimeoutSensor(DataLabError):
-    """El sensor no respondió a tiempo. Se simula con la clave
-    "observacion_tecnica": "SIMULACION_TIMEOUT_SENSOR"."""
+class ErrorEventoSensor(DataLabError):
+    """Falla técnica reportada por el propio sensor en la columna
+    "observacion_tecnica" (valores que empiezan con "SIMULACION_")."""
+    CATEGORIA = "EVENTO_SENSOR"
+
+
+class ErrorTimeoutSensor(ErrorEventoSensor):
+    """El sensor no respondió a tiempo (SIMULACION_TIMEOUT_SENSOR)."""
     CATEGORIA = "TIMEOUT_SENSOR"
+
+
+class ErrorPaqueteIncompleto(ErrorEventoSensor):
+    """El paquete de datos llegó incompleto (SIMULACION_PAQUETE_INCOMPLETO)."""
+    CATEGORIA = "PAQUETE_INCOMPLETO"
+
+
+class ErrorLecturaIntermitente(ErrorEventoSensor):
+    """La lectura del sensor fue intermitente (SIMULACION_LECTURA_INTERMITENTE)."""
+    CATEGORIA = "LECTURA_INTERMITENTE"
+
+
+# Tabla evento -> excepción. Agregar un evento nuevo = agregar una línea aquí,
+# sin tocar procesamiento.py. Un "SIMULACION_..." que no esté en la tabla se
+# reporta con la clase general ErrorEventoSensor.
+EVENTOS_TECNICOS = {
+    "SIMULACION_TIMEOUT_SENSOR": ErrorTimeoutSensor,
+    "SIMULACION_PAQUETE_INCOMPLETO": ErrorPaqueteIncompleto,
+    "SIMULACION_LECTURA_INTERMITENTE": ErrorLecturaIntermitente,
+}
 
 
 def crear_reporte_error(origen, identificador, mensaje, categoria="PROCESAMIENTO"):
