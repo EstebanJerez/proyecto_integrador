@@ -1,77 +1,68 @@
-"""Interfaz Streamlit provista por el docente.
-
-La interfaz está completa en su capa gráfica desde el día uno.
-El modo de demostración usa los registros en memoria. La carga real de archivos
-se habilita cuando el rol C complete lectores.py y el rol B integre errores.
-No colocar reglas de negocio en este archivo.
-"""
+"""Interfaz gráfica docente de DataLab."""
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from src.data.fuentes_memoria import cargar_desde_memoria
-from src.processing.clasificacion import clasificar_valor
+from src.services.datalab_service import ejecutar_demo, ejecutar_archivo
 
 st.set_page_config(page_title="DataLab | Sensores", page_icon="📊", layout="wide")
 st.title("DataLab — Procesamiento y análisis de sensores")
-st.caption("Interfaz provista por el docente. La lógica de negocio reside en los módulos de src/.")
+st.caption("Aplicación integradora: calidad, robustez y múltiples fuentes de datos.")
 
 with st.sidebar:
     st.header("Fuente de datos")
-    fuente = st.radio("Selecciona el modo", ["Demostración en memoria", "Carga de archivos"])
-    st.info("La demostración está disponible desde la primera entrega.")
-    archivo_subido = None
-    if fuente == "Carga de archivos":
-        st.info("La recepción del archivo está disponible desde el día uno. Su lectura e integración al procesamiento se habilitan con los módulos del rol C en semana 12.")
-        archivo_subido = st.file_uploader("Selecciona un archivo", type=["csv", "json", "xlsx"])
-    st.divider()
-    st.caption("DataLab · Proyecto integrador")
+    fuente=st.radio("Selecciona el modo", ["Demostración en memoria", "Carga de archivos"])
+    archivo=st.file_uploader("Selecciona CSV, JSON o Excel", type=["csv","json","xlsx"]) if fuente == "Carga de archivos" else None
 
+resultado=None
 if fuente == "Demostración en memoria":
-    registros = cargar_desde_memoria()
-    resultados = []
-    for registro in registros:
-        fila = registro.copy()
-        fila["clasificacion"] = clasificar_valor(float(fila["valor"]), fila["tipo"])
-        resultados.append(fila)
-    df = pd.DataFrame(resultados)
+    resultado=ejecutar_demo()
+elif archivo is not None:
+    try:
+        resultado=ejecutar_archivo(archivo, archivo.name)
+    except Exception as exc:
+        st.error(f"No fue posible procesar el archivo: {exc}")
 
-    total = len(df)
-    altos = int((df["clasificacion"] == "ALTO").sum())
-    normales = int((df["clasificacion"] == "NORMAL").sum())
-    bajos = int((df["clasificacion"] == "BAJO").sum())
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Registros", total)
-    c2.metric("BAJO", bajos)
-    c3.metric("NORMAL", normales)
-    c4.metric("ALTO", altos)
-
-    tab1, tab2, tab3 = st.tabs(["Registros", "Indicadores", "Calidad"])
+if resultado is not None:
+    validos=resultado["registros_validos"]
+    invalidos=resultado["registros_invalidos"]
+    errores=resultado["errores"]
+    df=pd.DataFrame(validos)
+    resumen=resultado["resumen"]
+    c1,c2,c3,c4=st.columns(4)
+    c1.metric("Registros recibidos", len(validos)+len(invalidos)+len(errores))
+    c2.metric("Válidos", len(validos))
+    c3.metric("Inválidos", len(invalidos))
+    c4.metric("Errores técnicos", len(errores))
+    tab1,tab2,tab3,tab4=st.tabs(["Registros válidos","Indicadores","Calidad","Errores técnicos"])
     with tab1:
         st.subheader("Registros procesados")
         st.dataframe(df, use_container_width=True, hide_index=True)
-        st.download_button("Descargar resultados CSV", df.to_csv(index=False).encode("utf-8-sig"),
-                           "datalab_resultados_demo.csv", "text/csv")
+        if not df.empty:
+            st.download_button("Descargar válidos CSV", df.to_csv(index=False).encode("utf-8-sig"), "datalab_validos.csv", "text/csv")
     with tab2:
-        st.subheader("Clasificación por sensor")
-        conteo = df.groupby(["tipo", "clasificacion"]).size().reset_index(name="cantidad")
-        fig = px.bar(conteo, x="tipo", y="cantidad", color="clasificacion",
-                     barmode="group", text="cantidad", title="Distribución de categorías")
-        st.plotly_chart(fig, use_container_width=True)
-        st.subheader("Promedio por sensor")
-        promedios = df.groupby("tipo", as_index=False)["valor"].mean()
-        st.dataframe(promedios, use_container_width=True, hide_index=True)
+        st.subheader("Distribución de clasificación")
+        if not df.empty:
+            conteo=df.groupby(["tipo","clasificacion"]).size().reset_index(name="cantidad")
+            st.plotly_chart(px.bar(conteo,x="tipo",y="cantidad",color="clasificacion",barmode="group",text="cantidad"),use_container_width=True)
+            st.write(f"Promedio general: **{resumen['promedio']:.2f}**")
+        else:
+            st.info("No hay registros válidos para calcular indicadores.")
     with tab3:
-        st.subheader("Estado de los datos")
-        st.success("Los registros de demostración están completos y utilizan valores numéricos.")
-        st.write("La validación ampliada y el panel de errores se conectarán a los módulos de los estudiantes durante las semanas 10 y 11.")
-else:
-    st.subheader("Carga de archivos")
-    if archivo_subido is not None:
-        st.success(f"Archivo recibido: {archivo_subido.name}")
-        st.write(f"Tamaño: {archivo_subido.size:,} bytes")
-        st.write(f"Formato: {archivo_subido.name.rsplit('.', 1)[-1].upper()}")
-        st.warning("La recepción gráfica funciona desde el día uno. La lectura estructurada y el procesamiento del archivo se conectarán cuando se integren los módulos del rol C (semana 12) y del rol B.")
-    else:
-        st.info("Selecciona un archivo CSV, JSON o Excel. La carga visual está disponible desde la primera entrega.")
-    st.caption("La interfaz no interpreta ni transforma los datos: esa responsabilidad pertenece a los módulos de lectura y procesamiento.")
+        if invalidos:
+            df_bad=pd.DataFrame([{"id":x["registro"].get("id"),"tipo":x["registro"].get("tipo"),"valor":x["registro"].get("valor"),"motivos":"; ".join(x["motivos"])} for x in invalidos])
+            st.dataframe(df_bad,use_container_width=True,hide_index=True)
+            st.download_button("Descargar inválidos CSV",df_bad.to_csv(index=False).encode("utf-8-sig"),"datalab_invalidos.csv","text/csv")
+        else:
+            st.success("No se encontraron registros inválidos.")
+    with tab4:
+        if errores:
+            st.dataframe(
+                pd.DataFrame(errores)[["identificador", "categoria", "origen", "mensaje", "fecha_hora"]],
+                use_container_width=True, hide_index=True
+            )
+            st.download_button(
+                "Descargar errores técnicos CSV",
+                pd.DataFrame(errores).to_csv(index=False).encode("utf-8-sig"),
+                "datalab_errores_tecnicos.csv", "text/csv"
+            )
+        else: st.success("No se registraron errores técnicos.")
